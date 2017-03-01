@@ -1,3 +1,6 @@
+import collections
+
+
 class DatasetMixin(object):
 
     """Default implementation of dataset indexing.
@@ -26,6 +29,11 @@ class DatasetMixin(object):
             while current < stop and step > 0 or current > stop and step < 0:
                 ret.append(self.get_example(current))
                 current += step
+            return ret
+        elif isinstance(index, collections.Iterable):
+            ret = []
+            for i in index:
+                ret.append(self.get_example(i))
             return ret
         else:
             return self.get_example(index)
