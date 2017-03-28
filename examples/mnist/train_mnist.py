@@ -10,6 +10,9 @@ from chainer.training import extensions
 
 
 # Network definition
+from examples.mnist.hessian_free import HessianFree
+
+
 class MLP(chainer.Chain):
 
     def __init__(self, n_units, n_out):
@@ -57,7 +60,9 @@ def main():
         model.to_gpu()  # Copy the model to the GPU
 
     # Setup an optimizer
-    optimizer = chainer.optimizers.Adam()
+    #optimizer = chainer.optimizers.SGD()
+    #optimizer = chainer.optimizers.Adam()
+    optimizer = HessianFree()
     optimizer.setup(model)
 
     # Load the MNIST dataset
