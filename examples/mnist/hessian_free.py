@@ -5,26 +5,23 @@ from chainer import cuda
 
 
 class HessianFree(Optimizer):
+
     """Base class of all single gradient-based optimizers.
 
-     This is an extension of the :class:`Optimizer` class. Typical gradient
+    See:
+    http://andrew.gibiansky.com/blog/machine-learning/hessian-free-optimization
+    http://machinelearning.wustl.edu/mlpapers/paper_files/icml2010_Martens10.pdf
+
+     Hessian Free optmization is second order optimization method.
+     It uses conjugate gradient method to calculate the product of Hessian and
+     vector.
      methods that just require the gradient at the current parameter vector on
      an update can be implemented as its child class.
 
      An implementation of a gradient method must override the following methods:
 
-     - :meth:`init_state` or both :meth:`init_state_cpu` and
-       :meth:`init_state_gpu`
-     - :meth:`update_one` or both :meth:`update_one_cpu` and
-       :meth:`update_one_gpu`
-
-     .. note::
-        It is recommended to call :meth:`use_cleargrads` after creating a
-        :class:`GradientMethod` object for efficiency.
-
      """
-    def __init__(self, lr=0.01, epsilon=1e-2):
-        self.lr = lr
+    def __init__(self,  epsilon=1e-5):
         self.epsilon = epsilon
         self.init = True
 
@@ -51,12 +48,8 @@ class HessianFree(Optimizer):
         - Otherwise, this method assumes that the gradients are already
           computed.
 
-        In both cases, the computed gradients are used to update parameters.
-        The actual update routines are defined by the :meth:`update_one`
-        method (or its CPU/GPU versions, :meth:`update_one_cpu` and
-        :meth:`update_one_gpu`).
-
         """
+
         # First forward-backward
         if lossfun is not None:
             use_cleargrads = getattr(self, '_use_cleargrads', False)
@@ -153,41 +146,41 @@ class HessianFree(Optimizer):
                 state = states[name]
                 param.data += (a - self.epsilon) * state['d']
 
-    def update_one(self, param, state):
-        """Updates a parameter based on the corresponding gradient and state.
-
-        This method calls appropriate one from :meth:`update_param_cpu` or
-        :meth:`update_param_gpu`.
-
-        Args:
-            param (~chainer.Variable): Parameter variable.
-            state (dict): State dictionary.
-
-        """
-        if isinstance(param.data, numpy.ndarray):
-            self.update_one_cpu(param, state)
-        else:
-            self.update_one_gpu(param, state)
-
-    def update_one_cpu(self, param, state):
-        """Updates a parameter on CPU.
-
-        Args:
-            param (~chainer.Variable): Parameter variable.
-            state (dict): State dictionary.
-
-        """
-        raise NotImplementedError
-
-    def update_one_gpu(self, param, state):
-        """Updates a parameter on GPU.
-
-        Args:
-            param (~chainer.Variable): Parameter variable.
-            state (dict): State dictionary.
-
-        """
-        raise NotImplementedError
+#    def update_one(self, param, state):
+#        """Updates a parameter based on the corresponding gradient and state.
+#
+#        This method calls appropriate one from :meth:`update_param_cpu` or
+#        :meth:`update_param_gpu`.
+#
+#        Args:
+#            param (~chainer.Variable): Parameter variable.
+#            state (dict): State dictionary.
+#
+#        """
+#        if isinstance(param.data, numpy.ndarray):
+#            self.update_one_cpu(param, state)
+#        else:
+#            self.update_one_gpu(param, state)
+#
+#    def update_one_cpu(self, param, state):
+#        """Updates a parameter on CPU.
+#
+#        Args:
+#            param (~chainer.Variable): Parameter variable.
+#            state (dict): State dictionary.
+#
+#        """
+#        raise NotImplementedError
+#
+#    def update_one_gpu(self, param, state):
+#        """Updates a parameter on GPU.
+#
+#        Args:
+#            param (~chainer.Variable): Parameter variable.
+#            state (dict): State dictionary.
+#
+#        """
+#        raise NotImplementedError
 
     def use_cleargrads(self, use=True):
         """Enables or disables use of :func:`~chainer.Link.cleargrads` in `update`.
