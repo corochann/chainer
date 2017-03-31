@@ -15,10 +15,6 @@ class HessianFree(optimizer.Optimizer):
      Hessian Free optmization is second order optimization method.
      It uses conjugate gradient method to calculate the product of Hessian and
      vector.
-     methods that just require the gradient at the current parameter vector on
-     an update can be implemented as its child class.
-
-     An implementation of a gradient method must override the following methods:
 
      """
     def __init__(self,  epsilon=1e-5):
