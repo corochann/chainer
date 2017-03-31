@@ -13,9 +13,10 @@ class HessianFree(optimizer.Optimizer):
     http://machinelearning.wustl.edu/mlpapers/paper_files/icml2010_Martens10.pdf
 
      Hessian Free optmization is second order optimization method.
-     It uses conjugate gradient method to calculate the product of Hessian and
-     vector.
-
+     It uses conjugate gradient method to avoid calculating inverse of Hessian,
+     which is required in Newton method.
+     It also uses finite difference coefficient to calculate the product of
+     Hessian and vector.
      """
     def __init__(self,  epsilon=1e-5):
         self.epsilon = epsilon
@@ -90,7 +91,8 @@ class HessianFree(optimizer.Optimizer):
                     state['nabla'] = param.grad.copy()
 
                     #state['hd'] = (param.grad - state['nabla']) / self.epsilon
-                    b_numerator += numpy.sum(state['d'] * state['nabla'])
+                    xp = cuda.get_array_module(param.data)
+                    b_numerator += xp.sum(state['d'] * state['nabla'])
                     #b_denominator += sum(state['d'] * state['hd'])
             b = b_numerator/(self.ab_denominator+1e-3)
             for name, param in self.target.namedparams():
@@ -126,13 +128,15 @@ class HessianFree(optimizer.Optimizer):
 
         for name, param in self.target.namedparams():
             with cuda.get_device(param.data):
+
                 state = states[name]
+                xp = cuda.get_array_module(param.data)
                 #print('diff', numpy.sum(param.grad - state['nabla']),
                 #      '\n', param.grad - state['nabla'])
                 state['hd'] = (param.grad - state['nabla']) / self.epsilon
-                a_numerator += numpy.sum(state['d'] * state['nabla'])
+                a_numerator += xp.sum(state['d'] * state['nabla'])
                 #print('state d', state['d'], 'state hd', state['hd'])
-                self.ab_denominator += numpy.sum(state['d'] * state['hd'])
+                self.ab_denominator += xp.sum(state['d'] * state['hd'])
 
         if self.ab_denominator == 0:
             print('WARNING numerator', a_numerator, 'denominator', self.ab_denominator)
