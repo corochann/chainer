@@ -93,6 +93,7 @@ class HessianFree(optimizer.Optimizer):
                     #state['hd'] = (param.grad - state['nabla']) / self.epsilon
                     xp = cuda.get_array_module(param.data)
                     b_numerator += xp.sum(state['d'] * state['nabla'])
+                    #b_numerator += numpy.sum(state['d'] * state['nabla'])
                     #b_denominator += sum(state['d'] * state['hd'])
             b = b_numerator/(self.ab_denominator+1e-3)
             for name, param in self.target.namedparams():
@@ -135,8 +136,10 @@ class HessianFree(optimizer.Optimizer):
                 #      '\n', param.grad - state['nabla'])
                 state['hd'] = (param.grad - state['nabla']) / self.epsilon
                 a_numerator += xp.sum(state['d'] * state['nabla'])
+                #a_numerator += numpy.sum(state['d'] * state['nabla'])
                 #print('state d', state['d'], 'state hd', state['hd'])
                 self.ab_denominator += xp.sum(state['d'] * state['hd'])
+                #self.ab_denominator += numpy.sum(state['d'] * state['hd'])
 
         if self.ab_denominator == 0:
             print('WARNING numerator', a_numerator, 'denominator', self.ab_denominator)
