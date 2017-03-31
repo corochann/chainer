@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from __future__ import print_function
+
 import argparse
 
 import chainer
@@ -7,10 +8,6 @@ import chainer.functions as F
 import chainer.links as L
 from chainer import training
 from chainer.training import extensions
-
-
-# Network definition
-from examples.mnist.hessian_free import HessianFree
 
 
 class MLP(chainer.Chain):
@@ -62,7 +59,7 @@ def main():
     # Setup an optimizer
     #optimizer = chainer.optimizers.SGD()
     #optimizer = chainer.optimizers.Adam()
-    optimizer = HessianFree()
+    optimizer = chainer.optimizers.HessianFree()
     optimizer.setup(model)
 
     # Load the MNIST dataset

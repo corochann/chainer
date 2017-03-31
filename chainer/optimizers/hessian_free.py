@@ -1,10 +1,10 @@
 import numpy
 
-from chainer import Optimizer
+from chainer import optimizer
 from chainer import cuda
 
 
-class HessianFree(Optimizer):
+class HessianFree(optimizer.Optimizer):
 
     """Base class of all single gradient-based optimizers.
 
