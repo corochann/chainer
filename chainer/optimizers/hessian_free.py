@@ -21,6 +21,15 @@ class HessianFree(optimizer.Optimizer):
     def __init__(self,  epsilon=1e-5):
         self.epsilon = epsilon
         self.init = True
+        self.calc_inner_product_sum = cuda.reduce(
+            'T u, T v',
+            'T sum_uv',
+            'u * v',
+            'a + b',
+            'sum_uv = a',
+            '0',
+            'calc_inner_product_sum'
+        )
 
     def init_state(self, param, state):
         self.init = True
@@ -75,32 +84,64 @@ class HessianFree(optimizer.Optimizer):
         states = self._states
         if self.init:
             for name, param in self.target.namedparams():
-                with cuda.get_device(param.data):
+                with cuda.get_device(param.data) as dev:
                     #self.update_one(param, states[name])
                     state = states[name]
                     state['d'] = -param.grad.copy()
                     state['nabla'] = param.grad.copy()
-                    param.data += self.epsilon * state['d']
+                    if int(dev) == -1:
+                        param.data += self.epsilon * state['d']
+                    else:
+                        cuda.elementwise(
+                            'T eps, T d', 'T param',
+                            'param += eps * d',
+                            'setup_param'
+                        )(self.epsilon, state['d'], param.data)
             self.init = False
         else:
             b_numerator = 0
             #b_denominator = 0
             for name, param in self.target.namedparams():
-                with cuda.get_device(param.data):
+                with cuda.get_device(param.data) as dev:
                     state = states[name]
                     state['nabla'] = param.grad.copy()
 
                     #state['hd'] = (param.grad - state['nabla']) / self.epsilon
                     xp = cuda.get_array_module(param.data)
-                    b_numerator += xp.sum(state['d'] * state['nabla'])
+                    if int(dev) == -1:
+                        b_numerator += numpy.sum(state['d'] * state['nabla'])
+                    else:
+                        # TODO: check behavior
+                        #b_numerator += xp.sum(state['d'] * state['nabla'])
+                        b_numerator += self.calc_inner_product_sum(state['d'], state['nabla'])
+
+                        #cuda.reduce(
+                        #    'T d, T nabla',
+                        #    'T b_numerator',
+                        #    'd * nabla',
+                        #    'a + b',
+                        #    'b_numerator += a',
+                        #    '0',
+                        #    'b_numerator_sum'
+                        #)(state['d'], state['nabla'], b_numerator)
                     #b_numerator += numpy.sum(state['d'] * state['nabla'])
                     #b_denominator += sum(state['d'] * state['hd'])
             b = b_numerator/(self.ab_denominator+1e-3)
             for name, param in self.target.namedparams():
-                with cuda.get_device(param.data):
+                with cuda.get_device(param.data) as dev:
                     state = states[name]
-                    state['d'] = -param.grad + b * state['d']
-                    param.data += self.epsilon * state['d']
+                    if int(dev) == -1:
+                        state['d'] = -param.grad + b * state['d']
+                        param.data += self.epsilon * state['d']
+                    else:
+                        cuda.elementwise(
+                            'T eps, T g, T b', 'T d, T param',
+                            '''
+                            d = -g + b * d;
+                            param += eps * d;
+                            ''',
+                            'update_param_first'
+                        )(self.epsilon, param.grad, b, state['d'], param.data)
 
         # Second forward-backward
         if lossfun is not None:
@@ -128,27 +169,44 @@ class HessianFree(optimizer.Optimizer):
         self.ab_denominator = 0
 
         for name, param in self.target.namedparams():
-            with cuda.get_device(param.data):
+            with cuda.get_device(param.data) as dev:
 
                 state = states[name]
                 xp = cuda.get_array_module(param.data)
                 #print('diff', numpy.sum(param.grad - state['nabla']),
                 #      '\n', param.grad - state['nabla'])
-                state['hd'] = (param.grad - state['nabla']) / self.epsilon
-                a_numerator += xp.sum(state['d'] * state['nabla'])
-                #a_numerator += numpy.sum(state['d'] * state['nabla'])
-                #print('state d', state['d'], 'state hd', state['hd'])
-                self.ab_denominator += xp.sum(state['d'] * state['hd'])
-                #self.ab_denominator += numpy.sum(state['d'] * state['hd'])
+                if int(dev) == -1:
+                    state['hd'] = (param.grad - state['nabla']) / self.epsilon
+                    a_numerator += xp.sum(state['d'] * state['nabla'])
+                    #a_numerator += numpy.sum(state['d'] * state['nabla'])
+                    #print('state d', state['d'], 'state hd', state['hd'])
+                    self.ab_denominator += xp.sum(state['d'] * state['hd'])
+                    #self.ab_denominator += numpy.sum(state['d'] * state['hd'])
+                else:
+                    state['hd'] = cuda.elementwise(
+                        'T g, T nabla, T eps',
+                        'T hd',
+                        'hd = (g - nabla) / eps',
+                        'calc_hd'
+                    )(param.grad, state['nabla'], self.epsilon)
+                    a_numerator += self.calc_inner_product_sum(state['d'], state['nabla'])
+                    self.ab_denominator += self.calc_inner_product_sum(state['d'], state['hd'])
+                    #self.ab_denominator += numpy.sum(state['d'] * state['hd'])
 
         if self.ab_denominator == 0:
             print('WARNING numerator', a_numerator, 'denominator', self.ab_denominator)
         a = -a_numerator/(self.ab_denominator + 1e-3)
         for name, param in self.target.namedparams():
-            with cuda.get_device(param.data):
+            with cuda.get_device(param.data) as dev:
                 state = states[name]
-                param.data += (a - self.epsilon) * state['d']
-
+                if int(dev) == -1:
+                    param.data += (a - self.epsilon) * state['d']
+                else:
+                    cuda.elementwise(
+                        'T a, T d', 'T param',
+                        'param += a * d',
+                        'update_param_second'
+                    )(a - self.epsilon, state['d'], param.data)
 #    def update_one(self, param, state):
 #        """Updates a parameter based on the corresponding gradient and state.
 #
